@@ -1,0 +1,176 @@
+---
+title: "Code for Data Analysis Final Project "
+author: "何圳麟 钟晓达 温子杭 肖宇翔"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+### Load the data;Summarize
+```{r 1}
+## Load the required packages
+library(tidyverse)
+library(car)
+library(QuantPsyc)
+library(ggplot2)
+library(kernlab)
+library(arules)
+library(InformationValue)
+library(readxl)
+library(readr)
+## Read the dataset.You can also download it from here.(http://roycekimmons.com/system/generate_data.php?dataset=exams&n=1000)
+read.csv(file = "StudentsPerformance.csv", header=T) %>% tibble() -> StudentsPerformance
+summary(StudentsPerformance) # summary
+
+```
+
+### Data Visualization
+```{r 2}
+## Exploring the categorical variables
+table(StudentsPerformance$Gender)
+table(StudentsPerformance$Race)
+table(StudentsPerformance$Parent_Education)
+table(StudentsPerformance$Lunch)
+table(StudentsPerformance$Test_Prep)
+
+## Plot Exam scores by Gender to determine if there is a different score tendency for each gender.
+
+# Math scores by Gender plot
+p1 <- ggplot(StudentsPerformance, aes(math.score)) + geom_histogram(binwidth=5, color="gray", aes(fill=gender))
+p1 <- p1 + xlab("Math Scores") + ylab("Gender") + ggtitle("Math Scores by Gender")
+p1
+
+
+# Reading scores by Gender plot
+p2 <- ggplot(StudentsPerformance, aes(reading.score)) + geom_histogram(binwidth=5, color="gray", aes(fill=gender))
+p2 <- p2 + xlab("Reading Scores") + ylab("Gender") + ggtitle("Reading Scores by Gender")
+p2
+
+
+# Writing scores by Gender plot
+p3 <- ggplot(StudentsPerformance, aes(writing.score)) +  geom_histogram(binwidth=5, color="gray", aes(fill=gender))
+p3 <- p3 + xlab("Writing Scores") + ylab("Gender") + ggtitle("Writing Scores by Gender")
+p3
+
+
+# Parents education and Scores
+e1 <- ggplot(StudentsPerformance) +
+  geom_bin2d(aes(x=writing.score, y=parental.level.of.education)) +
+   xlab("Writing Scores") + ylab("Parents Education") 
+e1
+
+e2 <- ggplot(StudentsPerformance) +
+  geom_bin2d(aes(x=reading.score, y=parental.level.of.education)) +
+   xlab("Reading Scores") + ylab("Parents Education") 
+e2
+
+e3 <- ggplot(StudentsPerformance) +
+  geom_bin2d(aes(x=math.score, y=parental.level.of.education)) +
+   xlab("Math Scores") + ylab("Parents Education") 
+e3
+
+```
+
+### Reconstruct
+```{r 3}
+# Make a new variable
+StudentsPerformance %>% rowwise() %>% mutate(mean.score = mean(c(math.score,reading.score, writing.score))) -> StudentsPerformanceMean 
+
+
+StudentsPerformanceMean %>% mutate(gender = factor(gender, levels = c("male","female")),
+                                   parental.level.of.education = factor(parental.level.of.education ,levels = c("high school" , "some high school" , "some college" , "associate's degree", "bachelor's degree", "master's degree")),
+                                   lunch = factor(lunch,levels = c("free/reduced","standard" )),
+                                   test.preparation.course = factor(test.preparation.course ,levels = c("none","completed" ))) -> StudentsPerformanceReconst # Reconstruct
+
+
+```
+
+### Factor Analysis and Prediction
+```{r 4}
+set.seed(99)
+
+### Prediction model
+randIndex <- sample(1:dim(StudentsPerformanceReconst)[1])
+#  # In order to split data, create a 2/3 cutpoint and round the number
+cutpoint2_3 <- floor(2*dim(StudentsPerformanceReconst)[1]/3)
+
+# create train data set, which contains the first 2/3 of overall data
+trainData <- StudentsPerformanceReconst[randIndex[1:cutpoint2_3],]
+ 
+# create test data, which contains the left 1/3 of the overall data
+testData <- StudentsPerformanceReconst[randIndex[(cutpoint2_3+1):dim(StudentsPerformanceReconst)[1]],]
+
+model1 <- lm(formula = mean.score ~ . - math.score -reading.score -writing.score , data =trainData)
+summary(model1)
+
+model2 <- lm(formula = mean.score ~ gender + parental.level.of.education + lunch + test.preparation.course, data = trainData)
+summary(model2)
+
+model3 <- lm(formula = mean.score ~ gender + race.ethnicity + lunch + test.preparation.course, data = trainData)
+summary(model3)
+
+lmPred1 <- predict(model1,testData,interval = "prediction", level=0.95)
+summary(lmPred1)
+head(lmPred1)
+
+# 1. Add predictions 
+mydata1 <- cbind(testData, lmPred1)
+head(mydata1)
+# 2. Regression line + confidence intervals
+p <- ggplot(mydata1, aes( fit, math.score)) +
+  geom_point() +
+  stat_smooth(method = lm)
+# 3. Add prediction intervals
+p + geom_line(aes(y = lwr), color = "red", linetype = "dashed")+
+  geom_line(aes(y = upr), color = "red", linetype = "dashed") +
+xlab("Predicted Scores") + ylab("Test Scores")
+
+lmPred2 <- predict(model2,testData,interval = "prediction", level=0.95)
+summary(lmPred2)
+head(lmPred2)
+
+# 1. Add predictions 
+mydata2 <- cbind(testData, lmPred2)
+head(mydata2)
+# 2. Regression line + confidence intervals
+p <- ggplot(mydata2, aes( fit, math.score)) +
+  geom_point() +
+  stat_smooth(method = lm)
+# 3. Add prediction intervals
+p + geom_line(aes(y = lwr), color = "red", linetype = "dashed")+
+  geom_line(aes(y = upr), color = "red", linetype = "dashed") +
+xlab("Predicted Scores") + ylab("Test Scores")
+
+lmPred3 <- predict(model3,testData,interval = "prediction", level=0.95)
+summary(lmPred3)
+head(lmPred3)
+
+# 1. Add predictions 
+mydata3 <- cbind(testData, lmPred3)
+head(mydata3)
+
+# 2. Regression line + confidence intervals
+p <- ggplot(mydata3, aes( fit, math.score)) +
+  geom_point() +
+  stat_smooth(method = lm)
+
+# 3. Add prediction intervals
+p + geom_line(aes(y = lwr), color = "red", linetype = "dashed")+
+  geom_line(aes(y = upr), color = "red", linetype = "dashed") +
+xlab("Predicted Scores") + ylab("Test Scores")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
